@@ -468,11 +468,11 @@ keypress(XKeyEvent *ev)
 		if (lines > 0)
 			return;
 		/* fallthrough */
-	case XK_Down:		
-		if (sel && sel->right && (sel = sel->right) == next) {		
-			curr = next;		
-			calcoffsets();		
-		}		
+	case XK_Down:
+		if (sel && sel->right && (sel = sel->right) == next) {
+			curr = next;
+			calcoffsets();
+		}
 		break;
 	case XK_Tab:
 		if (!sel)
@@ -484,6 +484,60 @@ keypress(XKeyEvent *ev)
 		break;
     }
 	drawmenu();
+}
+
+static void
+pointermove(XEvent *e) {
+    struct item *item;
+    XPointerMovedEvent *ev = &e->xmotion;
+    int x = 0, y = 0, h = bh, w;
+
+    if (prompt && *prompt)
+  		x += promptw;
+
+    w = (lines > 0 || !matches) ? mw - x : inputw;
+
+    if(lines > 0) {
+        /* vertical list: highlight */
+        w = mw - x;
+        for(item = curr; item != next; item = item->right) {
+            y += h;
+            if(ev->y >= y && ev->y <= (y + h)) {
+                sel = item;
+                drawmenu();
+            }
+        }
+    } else if(matches) {
+        /* reached left end, page back */
+        x += inputw;
+        w = TEXTW("<");
+        if(prev && curr->left) {
+            if(ev->x >= x && ev->x <= x + w) {
+                sel = curr = prev;
+                calcoffsets();
+                drawmenu();
+                return;
+            }
+        }
+        /* horizontal list: highlight */
+        for(item = curr; item != next; item = item->right) {
+        x += w;
+            w = MIN(TEXTW(item->text), mw - x - TEXTW(">"));
+            if(ev->x >= x && ev->x <= (x + w)) {
+                sel = item;
+                drawmenu();
+            }
+        }
+        /* reached right end, page forward */
+        w = TEXTW(">");
+        x = mw - w;
+        if(next && ev->x >= x && ev->x <= x + w) {
+            sel = curr = next;
+            calcoffsets();
+            drawmenu();
+            return;
+        }
+    }
 }
 
 static void
@@ -513,9 +567,9 @@ buttonpress(XEvent *e)
 	   ((lines <= 0 && ev->x >= 0 && ev->x <= x + w +
 	   ((!prev || !curr->left) ? TEXTW("<") : 0)) ||
 	   (lines > 0 && ev->y >= y && ev->y <= y + h))) {
-		insert(NULL, -cursor);
-		drawmenu();
-		return;
+      insert(NULL, -cursor);
+      drawmenu();
+      return;
 	}
 	/* middle-mouse click: paste selection */
 	if (ev->button == Button2) {
@@ -539,8 +593,6 @@ buttonpress(XEvent *e)
 		return;
 	}
 	if (ev->button != Button1)
-		return;
-	if (ev->state & ~ControlMask)
 		return;
 	if (lines > 0) {
 		/* vertical list: (ctrl)left-click on item */
@@ -653,6 +705,10 @@ run(void)
 		if (XFilterEvent(&ev, win))
 			continue;
 		switch(ev.type) {
+    case MotionNotify:
+      while(XCheckTypedEvent(dpy, MotionNotify, &ev)) (void)0;
+      pointermove(&ev);
+      break;
 		case ButtonPress:
 			buttonpress(&ev);
 			break;
@@ -754,7 +810,7 @@ setup(void)
 	swa.override_redirect = True;
 	swa.background_pixel = scheme[SchemeNorm][ColBg].pixel;
 	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask |
-		             ButtonPressMask;
+		             ButtonPressMask| PointerMotionMask;
 	win = XCreateWindow(dpy, parentwin, x, y, mw, mh, 0,
 	                    CopyFromParent, CopyFromParent, CopyFromParent,
 	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &swa);
